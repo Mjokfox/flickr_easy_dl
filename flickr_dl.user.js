@@ -3,6 +3,7 @@
 // @version      1.0.0
 // @description  download all ids on a flickr photostream page to a json
 // @author       Mjokfox
+// @license      GPLv3
 // @match        https://www.flickr.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=flickr.com
 // @grant        none
