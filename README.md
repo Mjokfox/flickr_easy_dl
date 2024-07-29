@@ -36,7 +36,7 @@ $ python flickr_dl.py <name of .json file>
 ## For single images:
 Simply download the python script and install the requirements.txt file to your virtual environment if necessary. Then copy the url to the page, this should be in the shape: "https://www.flickr.com/photos/[userid]/[imageid]/" "sizes/[a-z]/" may be appended to it too, the script will accept that. This url should then be used with the python script as followed:
 ```
-python flickr_dl.py -u "url"
+$ python flickr_dl.py -u "url"
 ```
 The quotes might be necessary.
 Then the highest quality available image will be put in downloads/ from your current directory.
