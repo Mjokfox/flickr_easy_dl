@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         flickr photostream dl js part
-// @version      1.0.0
+// @name         flickr photostream dl js part another one
+// @version      1.0.1
 // @description  download all ids on a flickr photostream page to a json
 // @author       Mjokfox
 // @license      GPLv3
