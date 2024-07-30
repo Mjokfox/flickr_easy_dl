@@ -3,6 +3,7 @@
 // @version      1.0.3
 // @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
+// @updateURL    https://gitinthebutt.ofafox.com/Mjokfox/flickr_photostream_dl/raw/branch/main/flickrezdl.user.js
 // @license      GPLv3
 // @match        https://www.flickr.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=flickr.com
