@@ -7,6 +7,7 @@
 // @match        https://www.flickr.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=flickr.com
 // @grant        none
+// @inject-into  content
 // ==/UserScript==
 
 (function() {
