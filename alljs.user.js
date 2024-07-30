@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         flickr photostream dl js part another one
-// @version      1.0.1
+// @name         flickr photostream dl js part
+// @version      1.0.0
 // @description  download all ids on a flickr photostream page to a json
 // @author       Mjokfox
 // @license      GPLv3
@@ -64,11 +64,14 @@
             const link = parent.querySelector('a');
             maxHref = link ? link.href : null;
         }
+        if (smallElements[largesti].textContent == "(All sizes of this photo are available for download under a Creative Commons license)") {
+            return maxHref
+        }
         if (maxHref) { // If it's not null, fetch the HTML for the larger image
             html = await fetchHtml(maxHref);
             return findImageUrl(html);
-        return findImageUrl(html);
         }
+        return findImageUrl(html);
     }
 
     // Function to download image
@@ -84,16 +87,25 @@
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
         })
-        .catch(() => alert('Failed to download image'));
+        .catch((error) => console.error(`Failed to download image for: ${url}: ${error}`));
     }
 
     // Main function to execute the script
     async function downloadLargestFlickrImage() {
-        const userId = window.location.pathname.split('/')[2];
-        const imageId = window.location.pathname.split('/')[3];
-        const sizesPageUrl = `https://www.flickr.com/photos/${userId}/${imageId}/sizes/`;
-        const html = await fetchHtml(sizesPageUrl);
+//        const userId = window.location.pathname.split('/')[2];
+//        const imageId = window.location.pathname.split('/')[3];
+//        const sizesPageUrl = `https://www.flickr.com/photos/${userId}/${imageId}/sizes/`;
+        let pageUrl = window.location.href
+        if (!pageUrl.includes("sizes")) {
+           // if(pageUrl.endsWith("/")) {
+                pageUrl += pageUrl.endsWith("/") ? "sizes/" : "/sizes/"
+         //   } else{
+            //    pageUrl += "/sizes/"
+            //}
+        }
+        const html = await fetchHtml(pageUrl);
         if (html) {
             const imageUrl = await findLargestResolution(html);
             if (imageUrl) {
@@ -108,19 +120,66 @@
 
     // Add a button to trigger the download
     const button = document.createElement('button');
-    button.innerHTML = 'Download Largest Image';
+    button.innerHTML = 'Download Image';
     button.style.position = 'fixed';
     button.style.bottom = '10px';
     button.style.right = '10px';
+    button.style.height = "32px";
+    button.style.fontFamily = "Proxima Nova,helvetica neue,helvetica,arial,sans-serif";
+    button.style.fontWeight = "600";
+    button.style.padding = '0px 20px';
     button.style.zIndex = '1000';
-    button.style.backgroundColor = '#007BFF';
+    button.style.backgroundColor = '#1c9be9';
     button.style.color = '#FFF';
     button.style.cursor = 'pointer';
-    button.style.padding = '10px 20px';
-    button.style.fontSize = '16px';
     button.style.border = 'none';
     button.style.borderRadius = '5px';
+    button.style.fontSize = '16px';
     document.body.appendChild(button);
-
     button.addEventListener('click', downloadLargestFlickrImage);
+
+function addDownloadButton(element) {
+        // Create the download button
+        const button = document.createElement('button');
+        button.textContent = 'Download';
+        button.style.position = 'absolute'; // Positioning the button
+        button.style.top = '10px'; // Adjust as needed
+        button.style.right = '-10px'; // Adjust as needed
+        button.style.zIndex = '1000'; // Ensure the button is on top of the image
+
+        // Attach the download function to the button
+        button.addEventListener('click', function() {
+            downloadLargestFlickrImage(element);
+        });
+
+        // Append the button to the overlay element
+        element.style.position = 'relative'; // Ensure the container is positioned relative for the button to be absolute
+        element.appendChild(button);
+    }
+
+    // Callback function to execute when mutations are observed
+    const observerCallback = function(mutationsList, observer) {
+        for (const mutation of mutationsList) {
+            if (mutation.type === 'childList') {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE && node.matches('a.overlay')) {
+                        addDownloadButton(node);
+                    }
+                    // If the new node doesn't match, we should also check its descendants
+                    const overlayElements = node.querySelectorAll && node.querySelectorAll('a.overlay');
+                    overlayElements.forEach(addDownloadButton);
+                }
+            }
+        }
+    };
+
+    // Create an observer instance linked to the callback function
+    const observer = new MutationObserver(observerCallback);
+
+    // Start observing the document for added nodes
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Initially add the button to any existing <a> elements with class 'overlay'
+    document.querySelectorAll('a.overlay').forEach(addDownloadButton);
+
 })();
