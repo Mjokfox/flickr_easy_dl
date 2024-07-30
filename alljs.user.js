@@ -51,7 +51,7 @@
         // find the next page url to the largest image
         const parent = smallElements[largesti].parentElement;
         if (parent) {
-            const link = parent.querySelector('a');
+            const link = parent.querySelector(':scope > a'); // single layer depth
             maxHref = link ? link.href : null; // if there is no <a> element, we are already on the largest size page
         }
         if (smallElements[largesti].textContent == "(All sizes of this photo are available for download under a Creative Commons license)") {
