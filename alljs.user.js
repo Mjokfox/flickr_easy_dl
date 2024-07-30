@@ -174,12 +174,12 @@ function addDownloadButton(element) {
     };
 
     // Create an observer instance linked to the callback function
-    const observer = new MutationObserver(observerCallback);
+    // const observer = new MutationObserver(observerCallback);
 
     // Start observing the document for added nodes
-    observer.observe(document.body, { childList: true, subtree: true });
+    // observer.observe(document.body, { childList: true, subtree: true });
 
     // Initially add the button to any existing <a> elements with class 'overlay'
-    document.querySelectorAll('a.overlay').forEach(addDownloadButton);
+    // document.querySelectorAll('a.overlay').forEach(addDownloadButton);
 
 })();
