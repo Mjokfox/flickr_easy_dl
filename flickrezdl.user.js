@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         flickr photostream dl js part
-// @version      1.0.0
-// @description  download all ids on a flickr photostream page to a json
+// @name         flickr easy download
+// @version      1.0.3
+// @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
 // @license      GPLv3
 // @match        https://www.flickr.com/*
