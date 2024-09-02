@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         flickr easy download
-// @version      1.0.3
+// @version      1.0.4
 // @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
 // @updateURL    https://gitinthebutt.ofafox.com/Mjokfox/flickr_photostream_dl/raw/branch/main/flickrezdl.user.js
@@ -45,6 +45,8 @@
         // instead of doing arithmatic, exploit the standard page layout
         if (smallElements[0].textContent == "(75 × 75)") {
             largesti = smallElements.length - 1;
+        } else if (smallElements[1].parentElement.querySelector(':scope > a').innerHTML == "Original"){
+            largesti = 1;
         } else {
             largesti = 0;
         }
