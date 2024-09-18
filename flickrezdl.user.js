@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         flickr easy download
-// @version      1.0.4
+// @version      1.0.5
 // @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
 // @updateURL    https://gitinthebutt.ofafox.com/Mjokfox/flickr_photostream_dl/raw/branch/main/flickrezdl.user.js
@@ -119,32 +119,59 @@
         }
     }
 
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function downloadAll(buttonelement) {
+    buttonelement.disabled = true
+    const elements = document.querySelectorAll("a.overlay");
+
+    for (const element of elements) {
+      downloadLargestFlickrImage(element)
+      await delay(500 + Math.floor(Math.random() * 500));
+    }
+    buttonelement.disabled = false
+  }
+
     // Add a global floating button so it can be added and removed without querying
-    const button = document.createElement('button');
-        button.innerHTML = 'Download Image';
-        button.style.position = 'fixed';
-        button.style.bottom = '10px';
-        button.style.right = '10px';
-        button.style.height = "32px";
-        button.style.fontFamily = "Proxima Nova,helvetica neue,helvetica,arial,sans-serif";
-        button.style.fontWeight = "600";
-        button.style.padding = '0px 20px';
-        button.style.zIndex = '1000';
-        button.style.backgroundColor = '#1c9be9';
-        button.style.color = '#FFF';
-        button.style.cursor = 'pointer';
-        button.style.border = 'none';
-        button.style.borderRadius = '5px';
-        button.style.fontSize = '16px';
-        button.className = "amogus"; // empty classname that wont be used by normal pages
+  function makeButton(text, clickHandler) {
+      const button = document.createElement('button');
+      button.style.position = 'fixed';
+      button.style.bottom = '10px';
+      button.style.right = '10px';
+      button.style.height = "32px";
+      button.style.fontFamily = "Proxima Nova, helvetica neue, helvetica, arial, sans-serif";
+      button.style.fontWeight = "600";
+      button.style.padding = '0px 20px';
+      button.style.zIndex = '1000';
+      button.style.backgroundColor = '#1c9be9';
+      button.style.color = '#FFF';
+      button.style.border = 'none';
+      button.style.borderRadius = '5px';
+      button.style.fontSize = '16px';
+      button.id = "amogus";
+
+      button.innerHTML = text;
+
+      button.addEventListener('click', clickHandler);
+
+      return button;
+  }
+  const buttonSingle = makeButton('Download Image', downloadLargestFlickrImage);
+  buttonSingle.style.cursor = "pointer" 
+  const buttonAll = makeButton('Download All Images', function() {
+    downloadAll(buttonAll);
+  });
+
 
     function addFloatingButton(){
-    if (document.documentElement.classList.contains('html-photo-page-scrappy-view') || window.location.href.includes("sizes")) {
-        if (!document.querySelector('button.amogus')){
-            document.body.appendChild(button);
-            button.addEventListener('click', downloadLargestFlickrImage);
-        }
-    } else if (document.querySelector('button.amogus')){document.body.removeChild(button);}
+      if (document.getElementById('amogus')){document.body.removeChild(document.getElementById('amogus'));}
+      if (document.documentElement.classList.contains('html-photo-page-scrappy-view') || window.location.href.includes("sizes")) {
+            document.body.appendChild(buttonSingle);
+      } else if (document.documentElement.classList.contains('html-search-photos-unified-page-view')) {
+            document.body.appendChild(buttonAll);
+      }
     }
 
     // in photostream download button
@@ -158,7 +185,12 @@
     a.appendChild(i);
 
     a.addEventListener('click', function() {
-        downloadLargestFlickrImage(element);
+      a.style.cursor = "wait"
+      a.style.backgroundColor = "#0a0"
+      a.style.border = "2px solid white"
+      downloadLargestFlickrImage(element).then(() => {
+        a.style.cursor = "inherit";
+      })
     });
 
     element.appendChild(a);
@@ -182,7 +214,14 @@
             }
         }
     };
-
+    const style = document.createElement('style');
+    style.innerHTML = `
+      #amogus:disabled {
+        cursor: wait !important;
+        opacity: 0.6;
+      }
+    `;
+  document.head.appendChild(style);
     // Create an observer instance linked to the callback function
     const observer = new MutationObserver(observerCallback);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
