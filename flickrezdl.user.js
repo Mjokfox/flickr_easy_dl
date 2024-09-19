@@ -6,6 +6,7 @@
 // @updateURL    https://gitinthebutt.ofafox.com/Mjokfox/flickr_photostream_dl/raw/branch/main/flickrezdl.user.js
 // @license      GPLv3
 // @match        https://www.flickr.com/*
+// @match        https://flickr.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=flickr.com
 // @grant        none
 // @inject-into  content
