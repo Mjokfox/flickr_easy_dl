@@ -39,7 +39,6 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const smallElements = doc.querySelectorAll('small');
-        let maxResolution = 0;
         let largesti = 0;
         let maxHref = null;
 
@@ -68,22 +67,43 @@
         return findImageUrl(html);
     }
 
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
     // download the image
-    function downloadImage(url) {
-        fetch(url)
-        .then(response => response.blob())
-        .then(blob => {
-            const burl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = burl;
-            a.download = url.split('/').pop();;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        })
-        .catch((error) => console.error(`Failed to download image for: ${url}: ${error}`));
+    const MAX_RETRIES = 3;
+    
+    async function downloadImage(url) {
+        var tries = 0;
+        var waittime = 5000;
+        while(tries < MAX_RETRIES){
+            await fetch(url)
+                .then(response => response.blob())
+                .then(blob => {
+                    if(blob.size < 100){
+                        throw { type: 'Rate_limited', message: `received a ${blob.size} byte file, which probably isnt right` };
+                    }
+                    const burl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = burl;
+                    a.download = url.split('/').pop() || 'download';
+                    a.click();
+                    URL.revokeObjectURL(burl);
+                    tries = MAX_RETRIES;
+                })
+            .catch((error) => {
+                if (error.type === 'Rate_limited') {
+                    tries += 1;
+                    waittime = 5000 + Math.round(Math.random()*5000);
+                    console.log(`Rate limited, waiting ${waittime/1000} seconds before retrying: ${tries}/${MAX_RETRIES}`);
+                }
+                else{
+                    console.error(`Failed to download image for: ${url}: ${error}`)
+                }});
+            if (tries < MAX_RETRIES){
+                await sleep(waittime)
+            }
+        }
     }
 
     // remove everything after /in/ because that can sometimes be in the url
@@ -111,7 +131,7 @@
         if (html) {
             const imageUrl = await findLargestResolution(html);
             if (imageUrl) {
-                downloadImage(imageUrl);
+                await downloadImage(imageUrl);
             } else {
                 console.error('Failed to find the image URL.');
             }
@@ -120,59 +140,59 @@
         }
     }
 
-  function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  async function downloadAll(buttonelement) {
-    buttonelement.disabled = true
-    const elements = document.querySelectorAll("a.overlay");
-
-    for (const element of elements) {
-      downloadLargestFlickrImage(element)
-      await delay(500 + Math.floor(Math.random() * 500));
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
-    buttonelement.disabled = false
-  }
+
+    async function downloadAll(buttonelement) {
+        buttonelement.disabled = true
+        const elements = document.querySelectorAll("a.overlay");
+
+        for (const element of elements) {
+        downloadLargestFlickrImage(element)
+        await delay(500 + Math.floor(Math.random() * 500));
+        }
+        buttonelement.disabled = false
+    }
 
     // Add a global floating button so it can be added and removed without querying
-  function makeButton(text, clickHandler) {
-      const button = document.createElement('button');
-      button.style.position = 'fixed';
-      button.style.bottom = '10px';
-      button.style.right = '10px';
-      button.style.height = "32px";
-      button.style.fontFamily = "Proxima Nova, helvetica neue, helvetica, arial, sans-serif";
-      button.style.fontWeight = "600";
-      button.style.padding = '0px 20px';
-      button.style.zIndex = '1000';
-      button.style.backgroundColor = '#1c9be9';
-      button.style.color = '#FFF';
-      button.style.border = 'none';
-      button.style.borderRadius = '5px';
-      button.style.fontSize = '16px';
-      button.id = "amogus";
+    function makeButton(text, clickHandler) {
+        const button = document.createElement('button');
+        button.style.position = 'fixed';
+        button.style.bottom = '10px';
+        button.style.right = '10px';
+        button.style.height = "32px";
+        button.style.fontFamily = "Proxima Nova, helvetica neue, helvetica, arial, sans-serif";
+        button.style.fontWeight = "600";
+        button.style.padding = '0px 20px';
+        button.style.zIndex = '1000';
+        button.style.backgroundColor = '#1c9be9';
+        button.style.color = '#FFF';
+        button.style.border = 'none';
+        button.style.borderRadius = '5px';
+        button.style.fontSize = '16px';
+        button.id = "amogus";
 
-      button.innerHTML = text;
+        button.innerHTML = text;
 
-      button.addEventListener('click', clickHandler);
+        button.addEventListener('click', clickHandler);
 
-      return button;
-  }
-  const buttonSingle = makeButton('Download Image', downloadLargestFlickrImage);
-  buttonSingle.style.cursor = "pointer" 
-  const buttonAll = makeButton('Download All Images', function() {
-    downloadAll(buttonAll);
-  });
+        return button;
+    }
+    const buttonSingle = makeButton('Download Image', downloadLargestFlickrImage);
+    buttonSingle.style.cursor = "pointer"
+    const buttonAll = makeButton('Download All Images', function() {
+        downloadAll(buttonAll);
+    });
 
 
     function addFloatingButton(){
-      if (document.getElementById('amogus')){document.body.removeChild(document.getElementById('amogus'));}
-      if (document.documentElement.classList.contains('html-photo-page-scrappy-view') || window.location.href.includes("sizes")) {
-            document.body.appendChild(buttonSingle);
-      } else if (document.documentElement.classList.contains('html-search-photos-unified-page-view')) {
-            document.body.appendChild(buttonAll);
-      }
+        if (document.getElementById('amogus')){document.body.removeChild(document.getElementById('amogus'));}
+        if (document.documentElement.classList.contains('html-photo-page-scrappy-view') || window.location.href.includes("sizes")) {
+                document.body.appendChild(buttonSingle);
+        } else if (document.documentElement.classList.contains('html-search-photos-unified-page-view')) {
+                document.body.appendChild(buttonAll);
+        }
     }
 
     // in photostream download button
@@ -186,12 +206,12 @@
     a.appendChild(i);
 
     a.addEventListener('click', function() {
-      a.style.cursor = "wait"
-      a.style.backgroundColor = "#0a0"
-      a.style.border = "2px solid white"
-      downloadLargestFlickrImage(element).then(() => {
-        a.style.cursor = "inherit";
-      })
+        a.style.cursor = "wait"
+        a.style.backgroundColor = "#0a0"
+        a.style.border = "2px solid white"
+        downloadLargestFlickrImage(element).then(() => {
+            a.style.cursor = "inherit";
+        })
     });
 
     element.appendChild(a);
@@ -217,17 +237,17 @@
     };
     const style = document.createElement('style');
     style.innerHTML = `
-      #amogus:disabled {
-        cursor: wait !important;
-        opacity: 0.6;
-      }
+        #amogus:disabled {
+            cursor: wait !important;
+            opacity: 0.6;
+        }
     `;
-  document.head.appendChild(style);
-    // Create an observer instance linked to the callback function
-    const observer = new MutationObserver(observerCallback);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    document.head.appendChild(style);
+        // Create an observer instance linked to the callback function
+        const observer = new MutationObserver(observerCallback);
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
 
-    // maybe some already exist on load
-    document.querySelectorAll('div.engagement').forEach(addDownloadButton);
+        // maybe some already exist on load
+        document.querySelectorAll('div.engagement').forEach(addDownloadButton);
 
 })();
