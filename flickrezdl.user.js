@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         flickr easy download
-// @version      1.0.6
+// @version      1.0.7
 // @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
 // @updateURL    https://gitinthebutt.ofafox.com/Mjokfox/flickr_photostream_dl/raw/branch/main/flickrezdl.user.js
@@ -14,6 +14,13 @@
 
 (function() {
     'use strict';
+
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    var canceled = false;
+    var url_array = [];
+    var selecting = false;
 
     // Function to fetch HTML content
     async function fetchHtml(url) {
@@ -45,7 +52,7 @@
         // instead of doing arithmatic, exploit the standard page layout
         if (smallElements[0].textContent == "(75 × 75)") {
             largesti = smallElements.length - 1;
-        } else if (smallElements[1].parentElement.querySelector(':scope > a').innerHTML == "Original"){
+        } else if (smallElements[1].parentElement.firstElementChild.innerHTML == "Original"){
             largesti = 1;
         } else {
             largesti = 0;
@@ -54,7 +61,7 @@
         // find the next page url to the largest image
         const parent = smallElements[largesti].parentElement;
         if (parent) {
-            const link = parent.querySelector(':scope > a'); // single layer depth
+            const link = parent.firstElementChild; 
             maxHref = link ? link.href : null; // if there is no <a> element, we are already on the largest size page
         }
         if (smallElements[largesti].textContent == "(All sizes of this photo are available for download under a Creative Commons license)") {
@@ -67,9 +74,6 @@
         return findImageUrl(html);
     }
 
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
     // download the image
     const MAX_RETRIES = 3;
     
@@ -101,7 +105,7 @@
                     console.error(`Failed to download image for: ${url}: ${error}`)
                 }});
             if (tries < MAX_RETRIES){
-                await sleep(waittime)
+                await delay(waittime)
             }
         }
     }
@@ -116,11 +120,15 @@
     }
 
     // main function
-    async function downloadLargestFlickrImage(element) {
+    async function downloadFromButton(element, blocking=false) {
         let pageUrl = "";
         if (element.type != "click"){pageUrl = element.parentElement.parentElement.querySelector('a').href;}
         else{pageUrl = window.location.href;}
         if (!pageUrl){console.error("url not found"); return}
+        blocking ? await downloadLargestImage(pageUrl) : downloadLargestImage(pageUrl);
+    };
+    
+    async function downloadLargestImage(pageUrl){
         pageUrl = stripAfterIn(pageUrl);
 
         // add "sizes" to the url
@@ -140,81 +148,193 @@
         }
     }
 
-    function delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
     async function downloadAll(buttonelement) {
         buttonelement.disabled = true
         const elements = document.querySelectorAll("a.overlay");
+        buttonCancel.style.display = "unset";
 
         for (const element of elements) {
-        downloadLargestFlickrImage(element)
-        await delay(500 + Math.floor(Math.random() * 500));
+            if (canceled){console.log("Canceled downloading!");canceled=false; break;}
+            downloadFromButton(element)
+            await delay(500 + Math.floor(Math.random() * 500));
         }
+        buttonCancel.style.display = "none";
         buttonelement.disabled = false
     }
 
     // Add a global floating button so it can be added and removed without querying
-    function makeButton(text, clickHandler) {
+    function makeButton(text, clickHandler,bg_color=null,hidden=false) {
         const button = document.createElement('button');
-        button.style.position = 'fixed';
-        button.style.bottom = '10px';
-        button.style.right = '10px';
-        button.style.height = "32px";
-        button.style.fontFamily = "Proxima Nova, helvetica neue, helvetica, arial, sans-serif";
-        button.style.fontWeight = "600";
-        button.style.padding = '0px 20px';
-        button.style.zIndex = '1000';
-        button.style.backgroundColor = '#1c9be9';
-        button.style.color = '#FFF';
-        button.style.border = 'none';
-        button.style.borderRadius = '5px';
-        button.style.fontSize = '16px';
-        button.id = "amogus";
-
         button.innerHTML = text;
-
         button.addEventListener('click', clickHandler);
-
+        if (hidden) button.style.display="none";
+        if (bg_color) button.style.backgroundColor = bg_color;
         return button;
     }
-    const buttonSingle = makeButton('Download Image', downloadLargestFlickrImage);
+    function makeSelectionPanel(buttons) {
+        const div = document.createElement('div');
+        div.style.display = "flex";
+        div.style.flexDirection = 'column';
+        div.style.gap = "2px";
+        for (const button of buttons){
+            div.appendChild(button);
+        }
+        
+        return div;
+    }
+    const buttonSingle = makeButton('Download Image', downloadFromButton);
     buttonSingle.style.cursor = "pointer"
-    const buttonAll = makeButton('Download All Images', function() {
-        downloadAll(buttonAll);
-    });
+    const buttonAll = makeButton('Download All Images', function() {downloadAll(buttonAll);},"orchid");
+    const buttonSelect = makeButton('Select images', toggleSelect);
+    const buttonSelectStop = makeButton('stop selecting', toggleSelect,"red",true);
+    const buttonSelectInvert = makeButton('Invert selection', invertSelection);
+    const buttonSelectAll = makeButton('Select all', selectAll);
+    const buttonSelectNone = makeButton('Select none', selectNone);
+    const buttonDownloadSelect = makeButton('Download selection', downloadSelection,"green");
+    const selectionPanel = makeSelectionPanel([buttonSelect,buttonSelectStop,buttonSelectInvert,buttonSelectAll,buttonSelectNone,buttonDownloadSelect]);
+    const buttonCancel = makeButton('Cancel download!', function() {canceled=true;},"red",true);
+    
+    function toggleSelect() {
+        selecting = !selecting;
+        if (selecting){
+            buttonSelect.style.display = "none";
+            buttonSelectStop.style.display = "unset";
+            document.querySelectorAll('div.photo-list-photo-interaction').forEach(el => {el.firstElementChild.addEventListener("click",select);});
+        } else{
+            buttonSelect.style.display = "unset";
+            buttonSelectStop.style.display = "none";
+            document.querySelectorAll('div.photo-list-photo-interaction').forEach(el => {el.firstElementChild.removeEventListener("click",select);});
+        }
+    }
 
+    const amogus = document.createElement('div');
+    amogus.id = "amogus";
+    amogus.style.display = 'flex';
+    amogus.style.flexDirection = 'column';
+    amogus.style.gap = "2px";
+    amogus.style.position = 'fixed';
+    amogus.style.bottom = '10px';
+    amogus.style.right = '10px';
+    document.body.appendChild(amogus)
 
-    function addFloatingButton(){
-        if (document.getElementById('amogus')){document.body.removeChild(document.getElementById('amogus'));}
-        if (document.documentElement.classList.contains('html-photo-page-scrappy-view') || window.location.href.includes("sizes")) {
-                document.body.appendChild(buttonSingle);
-        } else if (document.documentElement.classList.contains('html-search-photos-unified-page-view')) {
-                document.body.appendChild(buttonAll);
+    let prev = [false, false];
+    function addFloatingButton() {
+        const isPhotoPage = document.documentElement.classList.contains('html-photo-page-scrappy-view') 
+            || window.location.href.includes("sizes");
+        const isSearchPage = document.documentElement.classList.contains('html-search-photos-unified-page-view')
+            || document.documentElement.classList.contains('html-group-pool-page-view')
+            || document.documentElement.classList.contains('html-album-page-view');
+        
+        const cur = [isPhotoPage, isSearchPage];
+
+        // only if theres a change in page
+        if (cur[0] !== prev[0] || cur[1] !== prev[1]) {
+            if (amogus.lastChild) {
+                amogus.innerHTML = "";
+            }
+
+            if (isPhotoPage) {
+                amogus.appendChild(buttonSingle);
+            } else if (isSearchPage) {
+                amogus.appendChild(selectionPanel);
+                amogus.appendChild(buttonAll);
+                amogus.appendChild(buttonCancel);
+            }
+
+            prev = cur;
         }
     }
 
     // in photostream download button
     function addDownloadButton(element) {
-    if(element.querySelector('a.engagement-item.download')){return} // skip if it already exists
-    const a = document.createElement('a');
-    a.className = 'engagement-item download';
-    a.title = "Download this photo";
-    const i = document.createElement('i');
-    i.className = 'ui-icon-download'; // use the page built in icon
-    a.appendChild(i);
+        const el = element.querySelector(".engagement");
+        if(el.querySelector('a.engagement-item.download'))return; // skip if it already exists
+        const a = document.createElement('a');
+        a.className = 'engagement-item download';
+        a.title = "Download this photo";
+        const i = document.createElement('i');
+        i.className = 'ui-icon-download'; // use the page built in icon
+        a.appendChild(i);
 
-    a.addEventListener('click', function() {
-        a.style.cursor = "wait"
-        a.style.backgroundColor = "#0a0"
-        a.style.border = "2px solid white"
-        downloadLargestFlickrImage(element).then(() => {
-            a.style.cursor = "inherit";
+        a.addEventListener('click', function() {
+            a.style.cursor = "wait"
+            a.style.backgroundColor = "#0a0"
+            a.style.border = "2px solid white"
+            downloadFromButton(el,true).then(() => {
+                a.style.cursor = "inherit";
+            })
+        });
+
+        el.appendChild(a);
+    }
+    
+    function invert_single(el){
+        const url = el.href
+        const i = url_array.indexOf(url)
+        if (i > -1) {
+            url_array.splice(i,1);
+            el.closest(".photo-list-photo-view").classList.remove("suslected")
+        }
+        else {
+            url_array.push(url);
+            el.closest(".photo-list-photo-view").classList.add("suslected")
+        }
+    }
+    var lastClick = null;
+    function select(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey && lastClick !== null){
+            const div = document.querySelector(".photo-list-view");
+            if (div && div.childElementCount > 0){
+                const children = Array.from(div.querySelectorAll("DIV.photo-list-photo-view"));
+        
+                const lastIndex = children.indexOf(lastClick);
+                const currentIndex = children.indexOf(e.target.closest(".photo-list-photo-view"));
+                
+                if (lastIndex !== -1 && currentIndex !== -1) {
+                    const start = Math.min(lastIndex+1, currentIndex); // do not iterate over lastIndex
+                    const end = Math.max(lastIndex-1, currentIndex);
+                    for (let i = start; i <= end;i++) {
+                        invert_single(children[i].querySelector("a.overlay"));
+                    }
+                }
+            }
+        }
+        else invert_single(e.target);
+        lastClick = e.target.closest(".photo-list-photo-view");
+    }
+
+    function invertSelection(){
+        document.querySelectorAll("A.overlay").forEach((el) => {
+            invert_single(el);
         })
-    });
+    }
 
-    element.appendChild(a);
+    function selectAll() {
+        url_array = [];
+        document.querySelectorAll("A.overlay").forEach((el) => {
+            url_array.push(el.href)
+            el.closest(".photo-list-photo-view").classList.add("suslected")
+        })
+    }
+
+    function selectNone() {
+        url_array = [];
+        document.querySelectorAll(".suslected").forEach((el) => {
+            el.classList.remove("suslected");
+        });
+    }
+
+    async function downloadSelection() {
+        buttonCancel.style.display = "unset";
+        for (const url of url_array) {
+            if (canceled){console.log("canceled downloading!");canceled=false; break;}
+            downloadLargestImage(url)
+            await delay(500 + Math.floor(Math.random() * 500));
+        }
+        buttonCancel.style.display = "none";
+        selectNone();
     }
 
     // Callback function to execute when mutations are observed
@@ -222,18 +342,17 @@
         for (const mutation of mutationsList) {
             if (mutation.type === 'childList') {
                 for (const node of mutation.addedNodes) {
-                    if (node.nodeType === Node.ELEMENT_NODE && node.matches('div.engagement')) {
-                        addDownloadButton(node);
+                    if (node.nodeType === Node.ELEMENT_NODE && node.matches('div.photo-list-photo-interaction')) {
+                        addDownloadButton(node)
+                        if (selecting)node.firstElementChild.addEventListener("click",select);
                     }
-                    // check descendants
-                    const overlayElements = node.querySelectorAll && node.querySelectorAll('div.engagement');
-                    if (overlayElements) {overlayElements.forEach(addDownloadButton);}
                 }
             }
             if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                addFloatingButton()
+                addFloatingButton();
             }
         }
+    
     };
     const style = document.createElement('style');
     style.innerHTML = `
@@ -241,13 +360,18 @@
             cursor: wait !important;
             opacity: 0.6;
         }
+
+        DIV.suslected {
+            border:3px solid red;
+            box-sizing:border-box;
+        }
     `;
+    addFloatingButton()
     document.head.appendChild(style);
-        // Create an observer instance linked to the callback function
-        const observer = new MutationObserver(observerCallback);
-        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
 
-        // maybe some already exist on load
-        document.querySelectorAll('div.engagement').forEach(addDownloadButton);
+    const observer = new MutationObserver(observerCallback);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
 
+    // maybe some already exist on load
+    document.querySelectorAll('div.photo-list-photo-interaction').forEach(el => {addDownloadButton(el);});
 })();
