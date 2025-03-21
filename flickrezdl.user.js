@@ -1,19 +1,38 @@
 // ==UserScript==
 // @name         flickr easy download
-// @version      1.0.7
+// @version      1.0.8
 // @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
-// @updateURL    https://gitinthebutt.ofafox.com/Mjokfox/flickr_photostream_dl/raw/branch/main/flickrezdl.user.js
+// @updateURL    https://github.com/Mjokfox/flickr_easy_dl/raw/refs/heads/main/flickrezdl.user.js
 // @license      GPLv3
 // @match        https://www.flickr.com/*
 // @match        https://flickr.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=flickr.com
-// @grant        none
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_registerMenuCommand
+// @grant        GM_openInTab
 // @inject-into  content
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    let findafox_upload = GM_getValue("findafox_upload", false);
+
+    function toggleFeature() {
+        findafox_upload = !findafox_upload;
+        GM_setValue("findafox_upload", findafox_upload);
+
+        if (findafox_upload) {
+            document.querySelectorAll('div.photo-list-photo-interaction').forEach(el => {add_findafox_dl_button(el.querySelector(".engagement"));});
+        } else {
+            document.querySelectorAll('a.findafox').forEach(el => {el.remove()});
+        }
+        alert(findafox_upload ? "Enabled!" : "Disabled!")
+    }
+
+    GM_registerMenuCommand((findafox_upload ? "Disable" : "Enable") + " the findafox upload button" , toggleFeature);
 
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -84,7 +103,7 @@
             await fetch(url)
                 .then(response => response.blob())
                 .then(blob => {
-                    if(blob.size < 100){
+                    if(blob.size < 512){
                         throw { type: 'Rate_limited', message: `received a ${blob.size} byte file, which probably isnt right` };
                     }
                     const burl = URL.createObjectURL(blob);
@@ -162,6 +181,30 @@
         buttonelement.disabled = false
     }
 
+    async function uploadFromButton(el) {
+        let pageUrl = "";
+        if (el.type != "click"){pageUrl = el.parentElement.parentElement.querySelector('a').href;}
+        else{pageUrl = window.location.href;}
+        if (!pageUrl){console.error("url not found"); return}
+        let strippedPageUrl = stripAfterIn(pageUrl);
+
+        // add "sizes" to the url
+        if (!strippedPageUrl.includes("sizes")) {
+            strippedPageUrl += strippedPageUrl.endsWith("/") ? "sizes/" : "/sizes/"
+        }
+        const html = await fetchHtml(strippedPageUrl);
+        if (html) {
+            const imageUrl = await findLargestResolution(html);
+            const data = {
+                media: imageUrl,
+                sourcejs: pageUrl
+            };
+            const params = new URLSearchParams(data);
+            const url = "https://findafox.net/upload?&" + params.toString();
+            GM_openInTab(url);
+        }
+    }
+
     // Add a global floating button so it can be added and removed without querying
     function makeButton(text, clickHandler,bg_color=null,hidden=false) {
         const button = document.createElement('button');
@@ -184,6 +227,7 @@
     }
     const buttonSingle = makeButton('Download Image', downloadFromButton);
     buttonSingle.style.cursor = "pointer"
+    const findafoxButton = makeButton("Upload to findafox",uploadFromButton,"#F70");
     const buttonAll = makeButton('Download All Images', function() {downloadAll(buttonAll);},"orchid");
     const buttonSelect = makeButton('Select images', toggleSelect);
     const buttonSelectStop = makeButton('stop selecting', toggleSelect,"red",true);
@@ -223,7 +267,8 @@
             || window.location.href.includes("sizes");
         const isSearchPage = document.documentElement.classList.contains('html-search-photos-unified-page-view')
             || document.documentElement.classList.contains('html-group-pool-page-view')
-            || document.documentElement.classList.contains('html-album-page-view');
+            || document.documentElement.classList.contains('html-album-page-view')
+            || document.documentElement.classList.contains('html-photostream-page-view');
         
         const cur = [isPhotoPage, isSearchPage];
 
@@ -235,6 +280,9 @@
 
             if (isPhotoPage) {
                 amogus.appendChild(buttonSingle);
+                if (findafox_upload) {
+                    amogus.appendChild(findafoxButton);
+                }
             } else if (isSearchPage) {
                 amogus.appendChild(selectionPanel);
                 amogus.appendChild(buttonAll);
@@ -261,6 +309,32 @@
             a.style.backgroundColor = "#0a0"
             a.style.border = "2px solid white"
             downloadFromButton(el,true).then(() => {
+                a.style.cursor = "inherit";
+            })
+        });
+
+        el.appendChild(a);
+
+        if (findafox_upload) {
+            add_findafox_dl_button(el);
+        }
+    }
+
+    function add_findafox_dl_button(el) {
+        const a = document.createElement('a');
+        a.className = 'engagement-item download findafox';
+        a.title = "Upload to findafox";
+        const img = document.createElement('img');
+        img.src = 'https://findafox.net/favicon.ico';
+        img.style.width = "16px";
+        img.style.height = "16px";
+        a.appendChild(img);
+
+        a.addEventListener('click', function() {
+            a.style.cursor = "wait";
+            a.style.backgroundColor = "#0a0";
+            a.style.border = "2px solid white";
+            uploadFromButton(el,true).then(() => {
                 a.style.cursor = "inherit";
             })
         });
