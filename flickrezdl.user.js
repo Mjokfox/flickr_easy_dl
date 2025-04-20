@@ -38,8 +38,10 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
     var canceled = false;
+    var loop_canceled = false;
     var url_array = [];
     var selecting = false;
+    var running = 0;
 
     // Function to fetch HTML content
     async function fetchHtml(url) {
@@ -103,6 +105,9 @@
             await fetch(url)
                 .then(response => response.blob())
                 .then(blob => {
+                    if(canceled) {
+                        tries = MAX_RETRIES;
+                    }
                     if(blob.size < 512){
                         throw { type: 'Rate_limited', message: `received a ${blob.size} byte file, which probably isnt right` };
                     }
@@ -148,6 +153,7 @@
     };
     
     async function downloadLargestImage(pageUrl){
+        running++;
         pageUrl = stripAfterIn(pageUrl);
 
         // add "sizes" to the url
@@ -155,15 +161,24 @@
                 pageUrl += pageUrl.endsWith("/") ? "sizes/" : "/sizes/"
         }
         const html = await fetchHtml(pageUrl);
-        if (html) {
-            const imageUrl = await findLargestResolution(html);
-            if (imageUrl) {
-                await downloadImage(imageUrl);
+        if(!canceled) {
+            if (html) {
+                const imageUrl = await findLargestResolution(html);
+                if(!canceled) {
+                    if (imageUrl) {
+                        await downloadImage(imageUrl);
+                    } else {
+                        console.error('Failed to find the image URL.');
+                    }
+                }
             } else {
-                console.error('Failed to find the image URL.');
+                console.error('Failed to download the HTML page.');
             }
-        } else {
-            console.error('Failed to download the HTML page.');
+        }
+        running--;
+        if(canceled && running <= 0) {
+            canceled = false;
+            console.log("All downloads stopped")
         }
     }
 
@@ -173,7 +188,7 @@
         buttonCancel.style.display = "unset";
 
         for (const element of elements) {
-            if (canceled){console.log("Canceled downloading!");canceled=false; break;}
+            if (loop_canceled){loop_canceled=false; break;}
             downloadFromButton(element)
             await delay(500 + Math.floor(Math.random() * 500));
         }
@@ -236,7 +251,7 @@
     const buttonSelectNone = makeButton('Select none', selectNone);
     const buttonDownloadSelect = makeButton('Download selection', downloadSelection,"green");
     const selectionPanel = makeSelectionPanel([buttonSelect,buttonSelectStop,buttonSelectInvert,buttonSelectAll,buttonSelectNone,buttonDownloadSelect]);
-    const buttonCancel = makeButton('Cancel download!', function() {canceled=true;},"red",true);
+    const buttonCancel = makeButton('Cancel download!', function() {console.log("canceling downloads!");canceled=true;loop_canceled=true},"red",true);
     
     function toggleSelect() {
         selecting = !selecting;
@@ -403,7 +418,7 @@
     async function downloadSelection() {
         buttonCancel.style.display = "unset";
         for (const url of url_array) {
-            if (canceled){console.log("canceled downloading!");canceled=false; break;}
+            if (loop_canceled){loop_canceled=false; break;}
             downloadLargestImage(url)
             await delay(500 + Math.floor(Math.random() * 500));
         }
