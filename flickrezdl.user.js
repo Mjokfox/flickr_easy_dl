@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         flickr easy download
-// @version      1.0.8
+// @version      1.0.9
 // @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
 // @updateURL    https://github.com/Mjokfox/flickr_easy_dl/raw/refs/heads/main/flickrezdl.user.js
