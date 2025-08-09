@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         flickr easy download
-// @version      1.0.9
+// @version      1.1.0
 // @description  download the highest resolution image on flickr with just one click!
 // @author       Mjokfox
 // @updateURL    https://github.com/Mjokfox/flickr_easy_dl/raw/refs/heads/main/flickrezdl.user.js
@@ -54,50 +54,9 @@
         }
     }
 
-    // Function to find the image URL from HTML content
-    function findImageUrl(html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const element = doc.querySelector('div#allsizes-photo img'); // child of div.allsizes-photo with type <img>
-        return element ? element.src : null;
-    }
-
-    // Function to find the largest resolution image URL
-    async function findLargestResolution(html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const smallElements = doc.querySelectorAll('small');
-        let largesti = 0;
-        let maxHref = null;
-
-        // instead of doing arithmatic, exploit the standard page layout
-        if (smallElements[0].textContent == "(75 × 75)") {
-            largesti = smallElements.length - 1;
-        } else if (smallElements[1].parentElement.firstElementChild.innerHTML == "Original"){
-            largesti = 1;
-        } else {
-            largesti = 0;
-        }
-
-        // find the next page url to the largest image
-        const parent = smallElements[largesti].parentElement;
-        if (parent) {
-            const link = parent.firstElementChild; 
-            maxHref = link ? link.href : null; // if there is no <a> element, we are already on the largest size page
-        }
-        if (smallElements[largesti].textContent == "(All sizes of this photo are available for download under a Creative Commons license)") {
-            return maxHref // stupid edge case
-        }
-        if (maxHref) { // If it's not null, fetch the HTML for the larger image
-            html = await fetchHtml(maxHref);
-            return findImageUrl(html);
-        }
-        return findImageUrl(html);
-    }
-
     // download the image
     const MAX_RETRIES = 3;
-    
+
     async function downloadImage(url) {
         var tries = 0;
         var waittime = 5000;
@@ -123,7 +82,7 @@
                 if (error.type === 'Rate_limited') {
                     tries += 1;
                     waittime = 5000 + Math.round(Math.random()*5000);
-                    console.log(`Rate limited, waiting ${waittime/1000} seconds before retrying: ${tries}/${MAX_RETRIES}`);
+                    console.log(`Rate limited, waiting ${waittime/1000} seconds before retrying: ${tries}/${MAX_RETRIES} ${url}`);
                 }
                 else{
                     console.error(`Failed to download image for: ${url}: ${error}`)
@@ -134,9 +93,13 @@
         }
     }
 
-    // remove everything after /in/ because that can sometimes be in the url
-    function stripAfterIn(url) {
-        var index = url.indexOf("/in/");
+    // remove everything after /sizes/ because that can sometimes be in the url
+    function stripUrl(url) {
+        let index = url.indexOf("/sizes/");
+        if (index !== -1) {
+            url = url.substring(0, index);
+        }
+        index = url.indexOf("/in/");
         if (index !== -1) {
             return url.substring(0, index);
         }
@@ -147,32 +110,19 @@
     async function downloadFromButton(element, blocking=false) {
         let pageUrl = "";
         if (element.type != "click"){pageUrl = element.parentElement.parentElement.querySelector('a').href;}
-        else{pageUrl = window.location.href;}
+        else{pageUrl = window.location.href}
         if (!pageUrl){console.error("url not found"); return}
         blocking ? await downloadLargestImage(pageUrl) : downloadLargestImage(pageUrl);
     };
-    
+
     async function downloadLargestImage(pageUrl){
         running++;
-        pageUrl = stripAfterIn(pageUrl);
-
-        // add "sizes" to the url
-        if (!pageUrl.includes("sizes")) {
-                pageUrl += pageUrl.endsWith("/") ? "sizes/" : "/sizes/"
-        }
-        const html = await fetchHtml(pageUrl);
+        let imageUrl = await findImageUrl(pageUrl);
         if(!canceled) {
-            if (html) {
-                const imageUrl = await findLargestResolution(html);
-                if(!canceled) {
-                    if (imageUrl) {
-                        await downloadImage(imageUrl);
-                    } else {
-                        console.error('Failed to find the image URL.');
-                    }
-                }
+            if (imageUrl) {
+                await downloadImage(imageUrl);
             } else {
-                console.error('Failed to download the HTML page.');
+                console.error('Failed to find the image URL.');
             }
         }
         running--;
@@ -180,6 +130,54 @@
             canceled = false;
             console.log("All downloads stopped")
         }
+    }
+
+    async function findImageUrl(pageUrl) {
+        pageUrl = stripUrl(pageUrl);
+        if (pageUrl === window.location.href) { // on the right page already (hopefully)
+            const current = document.body.querySelector(".main-photo").src;
+            const scriptText = document.body.querySelector(".modelExport").textContent;
+
+            const match = scriptText.match(/initialView: {.*?descendingSizes\":(\[.*?\])/s);
+            if (match) {
+                const sizeArray = JSON.parse(match[1]);
+                const tempImageUrl = sizeArray[0].displayUrl;
+                const matchcurrent = current.match(/\/\/live\.staticflickr\.com\/\d+\/(\d+)_[a-f0-9]+_.*/);
+                const matchnew = tempImageUrl.match(/\/\/live\.staticflickr\.com\/\d+\/(\d+)_[a-f0-9]+_.*/);
+                if (matchnew && matchcurrent) {
+                    if (matchnew[1] === matchcurrent[1]) {
+                        console.log("shortcut!");
+                        return "https:" + tempImageUrl;
+                    } else {
+                        console.log("taking the long route");
+                        return await fetchImagePage(window.location.href);
+                    }
+                }
+            } 
+        } 
+        // there has not been a return before this somehow
+        console.log("no shortcut");
+        return await fetchImagePage(pageUrl);
+    }
+
+    async function fetchImagePage(pageUrl) {
+        const html = await fetchHtml(pageUrl);
+        if(!canceled) {
+            if (html) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const scriptText = doc.body.querySelector(".modelExport").textContent;
+
+                const match = scriptText.match(/initialView: {.*?descendingSizes\":(\[.*?\])/s);
+                if (match) {
+                    const woo = JSON.parse(match[1]);
+                    return "https:" + woo[0].displayUrl;
+                }
+            } else {
+                console.error('Failed to download the HTML page.');
+            }
+        }
+        return null;
     }
 
     async function downloadAll(buttonelement) {
@@ -201,15 +199,8 @@
         if (el.type != "click"){pageUrl = el.parentElement.parentElement.querySelector('a').href;}
         else{pageUrl = window.location.href;}
         if (!pageUrl){console.error("url not found"); return}
-        let strippedPageUrl = stripAfterIn(pageUrl);
-
-        // add "sizes" to the url
-        if (!strippedPageUrl.includes("sizes")) {
-            strippedPageUrl += strippedPageUrl.endsWith("/") ? "sizes/" : "/sizes/"
-        }
-        const html = await fetchHtml(strippedPageUrl);
-        if (html) {
-            const imageUrl = await findLargestResolution(html);
+        let imageUrl = findImageUrl(pageUrl);
+        if (imageUrl) {
             const data = {
                 media: imageUrl,
                 sourcejs: pageUrl
@@ -237,7 +228,7 @@
         for (const button of buttons){
             div.appendChild(button);
         }
-        
+
         return div;
     }
     const buttonSingle = makeButton('Download Image', downloadFromButton);
@@ -252,7 +243,7 @@
     const buttonDownloadSelect = makeButton('Download selection', downloadSelection,"green");
     const selectionPanel = makeSelectionPanel([buttonSelect,buttonSelectStop,buttonSelectInvert,buttonSelectAll,buttonSelectNone,buttonDownloadSelect]);
     const buttonCancel = makeButton('Cancel download!', function() {console.log("canceling downloads!");canceled=true;loop_canceled=true},"red",true);
-    
+
     function toggleSelect() {
         selecting = !selecting;
         if (selecting){
@@ -278,13 +269,13 @@
 
     let prev = [false, false];
     function addFloatingButton() {
-        const isPhotoPage = document.documentElement.classList.contains('html-photo-page-scrappy-view') 
+        const isPhotoPage = document.documentElement.classList.contains('html-photo-page-scrappy-view')
             || window.location.href.includes("sizes");
         const isSearchPage = document.documentElement.classList.contains('html-search-photos-unified-page-view')
             || document.documentElement.classList.contains('html-group-pool-page-view')
             || document.documentElement.classList.contains('html-album-page-view')
             || document.documentElement.classList.contains('html-photostream-page-view');
-        
+
         const cur = [isPhotoPage, isSearchPage];
 
         // only if theres a change in page
@@ -356,7 +347,7 @@
 
         el.appendChild(a);
     }
-    
+
     function invert_single(el){
         const url = el.href
         const i = url_array.indexOf(url)
@@ -377,10 +368,10 @@
             const div = document.querySelector(".photo-list-view");
             if (div && div.childElementCount > 0){
                 const children = Array.from(div.querySelectorAll("DIV.photo-list-photo-view"));
-        
+
                 const lastIndex = children.indexOf(lastClick);
                 const currentIndex = children.indexOf(e.target.closest(".photo-list-photo-view"));
-                
+
                 if (lastIndex !== -1 && currentIndex !== -1) {
                     const start = Math.min(lastIndex+1, currentIndex); // do not iterate over lastIndex
                     const end = Math.max(lastIndex-1, currentIndex);
@@ -418,12 +409,13 @@
     async function downloadSelection() {
         buttonCancel.style.display = "unset";
         for (const url of url_array) {
-            if (loop_canceled){loop_canceled=false; break;}
+            if (loop_canceled) break;
             downloadLargestImage(url)
             await delay(500 + Math.floor(Math.random() * 500));
         }
         buttonCancel.style.display = "none";
-        selectNone();
+        if (!loop_canceled) selectNone();
+        loop_canceled=false;
     }
 
     // Callback function to execute when mutations are observed
@@ -441,7 +433,7 @@
                 addFloatingButton();
             }
         }
-    
+
     };
     const style = document.createElement('style');
     style.innerHTML = `
